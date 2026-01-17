@@ -1,0 +1,26 @@
+Important notes to address any codebase changes:
+
+- Use cargo check over cargo build, unless building is needed for immediate next steps
+- Use strong types when possible
+- use Enum iter with match statements
+- Always use itertools
+- Avoid clone if possible, use things like refs, or just restructuring the style of when appropriate
+- Use closures to reduce duplicate code
+- Use enums/structs as much as possible to reduce code complexity
+- Use anyhow::Error when possible. String is almost always a bad/weak type and very easy to make mistakes.
+- Prefer match to if let Some(foo) {...} else {...}. Only use if let Some(...) if there is no else branch.
+- Construct the runtime at the very top level once ever and then use it everywhere.
+- Always use .workspace = true, and don't use hardcoded paths for dependencies, specify that at the root level so you can still use .workspace = true.
+- Avoid .. it defeats the main purpose of destructing which is making future refactoring easy
+- Avoid caching UI elements. Very hard to get it right and the code is complex.
+- Use unwrap(), ensure!, assert, etc. Do not have silent errors.
+- Always destructure when possible first
+- Use proper match statements always
+- Don't use emojis
+- A main idea for a lot of these rules is that it prompts people to think about specific uses in the codebase when they change something.
+- Try not to read too many files as this is an immensely large codebase, rather use cleverly crafted commands. And with these commands, attempt to combine as many as possible into one (ex: by using "&&") to save on tool calling requests and context space. Use commands as much as possible.
+- If you are unsure, ask clarifying questions
+- Do not re-implement anything, try to find the original method always first.
+- Do not write any new comments unless explicitly necessary for other engineers working on the codebase. Use brief statements, or telegraphic language.
+- For any warnings that you see, if you prefix with an underscore or add clippy allows for example, you must thoroughly understand the full context of why it is there before taking action. Remember that the final project should not have any warnings, so it is best to take care of them now and address the architectural issues.
+- Act autonomously. Do NOT stop unless there is absolutely no path forward to achieve the directive. DO NOT stop if you have only completed part of the task and you know you can complete more. DO NOT pause and say if the user would like to continue if there are no issues in implementation when instructed to complete a task.

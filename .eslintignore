@@ -1,0 +1,6 @@
+# Reference codebases (external code not to be linted)
+ref/
+
+# Build outputs
+.next/
+node_modules/

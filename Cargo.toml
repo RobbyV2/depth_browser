@@ -1,6 +1,6 @@
 [package]
 name = "depth_browser"
-description = "Depth Browser"
+description = "Depth Browser - WebXR proxy with depth map generation"
 version = "0.1.0"
 edition = "2024"
 
@@ -11,16 +11,60 @@ members = ["wasm"]
 path = "src/lib.rs"
 
 [dependencies]
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-axum = "0.7"
+# Async runtime
+tokio = { version = "1", features = [
+  "macros",
+  "rt-multi-thread",
+  "net",
+  "io-util",
+  "sync",
+  "time",
+  "signal",
+] }
+
+# Web framework
+axum = { version = "0.7", features = ["ws", "http2"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = [
+  "cors",
+  "trace",
+  "fs",
+  "set-header",
+] }
+hyper = { version = "1.4", features = ["server", "client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["tokio", "client-legacy"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
+
+# Error handling
 anyhow = "1"
+thiserror = "2"
+
+# Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Config
 dotenvy = "0.15"
+
+# Wisp protocol (from epoxy-tls)
+wisp-mux = { path = "crates/wisp-mux", features = ["tokio-websockets"] }
+
+# WebSocket
+tokio-websockets = { version = "0.12", features = ["server", "sha1_smol"] }
+futures-util = "0.3"
+futures = "0.3"
+tokio-util = { version = "0.7", features = ["codec", "compat", "io-util"] }
+pin-project-lite = "0.2"
+
+# DNS resolution
+hickory-resolver = "0.25"
+
+# Utilities
+bytes = "1"
+uuid = { version = "1", features = ["v4"] }
 
 # Binaries are auto-discovered from src/bin/
 # Each .rs file in src/bin/ becomes a binary with the filename as its name

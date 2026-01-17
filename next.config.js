@@ -1,18 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  rewrites: async () => {
-    return {
-      beforeFiles: [],
-      afterFiles: [],
-      fallback: [
-        {
-          source: '/api/:path*',
-          destination: 'http://localhost:3001/api/:path*',
-        },
-      ],
-    }
-  },
+  allowedDevOrigins: ['localhost', '127.0.0.1'],
 }
 
 module.exports = nextConfig

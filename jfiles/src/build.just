@@ -8,11 +8,11 @@ build:
 
 # Build WASM module
 build-wasm:
-  cd {{ROOT}} && wasm-pack build --target web --out-dir public/wasm --release
+  cd {{ROOT}} && wasm-pack build wasm --target web --out-dir ../public/wasm --release
 
 # Build WASM for development
 build-wasm-dev:
-  cd {{ROOT}} && wasm-pack build --target web --out-dir public/wasm --dev
+  cd {{ROOT}} && wasm-pack build wasm --target web --out-dir ../public/wasm --dev
 
 # Build the API server binary for production
 build-api:

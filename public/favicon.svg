@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- VR Goggles -->
+  <rect x="2" y="10" width="28" height="14" rx="4" fill="#1a1a2e" stroke="#e94560" stroke-width="2"/>
+  <!-- Left lens -->
+  <circle cx="10" cy="17" r="5" fill="#0f3460" stroke="#e94560" stroke-width="1.5"/>
+  <!-- Right lens -->
+  <circle cx="22" cy="17" r="5" fill="#0f3460" stroke="#e94560" stroke-width="1.5"/>
+</svg>

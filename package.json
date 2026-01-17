@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "bun --env-file .env.local next dev",
     "build": "next build",
     "start": "bun .next/standalone/server.js",
     "lint": "eslint .",
@@ -12,6 +12,10 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "dependencies": {
+    "@mercuryworkshop/bare-mux": "^2.1.7",
+    "@mercuryworkshop/libcurl-transport": "^1.5.2",
+    "@mercuryworkshop/scramjet": "https://github.com/MercuryWorkshop/scramjet/releases/download/latest/mercuryworkshop-scramjet-2.0.0-alpha.tgz",
+    "@mercuryworkshop/wisp-js": "^0.4.1",
     "@types/node": "^22.19.2",
     "@types/react": "19.1.8",
     "@types/react-dom": "19.1.6",
