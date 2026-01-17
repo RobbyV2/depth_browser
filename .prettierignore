@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build output
+.next
+out
+dist
+target
+
+# Lock files
+bun.lock
+Cargo.lock
+package-lock.json
+yarn.lock
+
+# Env files
+.env*.local
+.env
+
+# Generated files
+next-env.d.ts
+*.tsbuildinfo
+

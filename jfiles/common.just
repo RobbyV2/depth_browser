@@ -1,0 +1,1 @@
+ROOT := `git rev-parse --show-toplevel`

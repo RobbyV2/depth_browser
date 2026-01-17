@@ -1,0 +1,37 @@
+import "../common.just"
+import "./build.just"
+import "./test.just"
+import "./run.just"
+
+# Default recipe
+default:
+  just --list
+
+# Install dependencies
+install:
+  cd {{ROOT}} && bun install
+  cargo install taplo-cli
+
+# Amend no edit
+amend:
+  git commit --amend --no-edit
+
+# Force push
+fp:
+  git push -f --force-with-lease
+
+# Amend and force push
+afp:
+  git commit --amend --no-edit && git push -f --force-with-lease
+
+# Add, amend and force push
+aafp:
+  git add . && git commit --amend --no-edit && git push -f --force-with-lease
+
+# Get submodules
+get-submodules:
+  git submodule update --init --recursive
+
+# Update submodules
+update-submodules:
+  git submodule update --recursive --remote --merge

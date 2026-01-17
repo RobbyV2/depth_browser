@@ -1,0 +1,29 @@
+{
+  "name": "rust-next",
+  "description": "Next.js + Rust API template",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "bun .next/standalone/server.js",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "dependencies": {
+    "@types/node": "^22.19.2",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "latest": "^0.2.0",
+    "next": "16.0.8",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "typescript": "5.8.3"
+  },
+  "devDependencies": {
+    "eslint": "8.57.0",
+    "eslint-config-next": "15.4.1",
+    "prettier": "^3.7.4"
+  }
+}

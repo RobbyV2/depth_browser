@@ -1,0 +1,43 @@
+repos:
+  - repo: local
+    hooks:
+      # Rust formatting
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: true
+
+      # Rust linting
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      # TOML formatting
+      - id: taplo-fmt
+        name: taplo fmt
+        entry: taplo fmt
+        language: system
+        types: [toml]
+        pass_filenames: false
+
+      # TypeScript/JavaScript linting
+      - id: eslint
+        name: eslint
+        entry: bun run lint
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+
+      # Prettier formatting
+      - id: prettier
+        name: prettier
+        entry: bunx prettier --write
+        language: system
+        types_or: [javascript, jsx, ts, tsx, json, markdown]
+        pass_filenames: true
+
