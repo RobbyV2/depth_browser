@@ -1,6 +1,6 @@
 {
-  "name": "rust-next",
-  "description": "Next.js + Rust API template",
+  "name": "depth-browser",
+  "description": "Screen capture with WebXR depth mapping",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -12,20 +12,20 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "dependencies": {
-    "@mercuryworkshop/bare-mux": "^2.1.7",
-    "@mercuryworkshop/libcurl-transport": "^1.5.2",
-    "@mercuryworkshop/scramjet": "https://github.com/MercuryWorkshop/scramjet/releases/download/latest/mercuryworkshop-scramjet-2.0.0-alpha.tgz",
-    "@mercuryworkshop/wisp-js": "^0.4.1",
+    "@huggingface/transformers": "^3.8.1",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
     "@types/node": "^22.19.2",
     "@types/react": "19.1.8",
     "@types/react-dom": "19.1.6",
-    "latest": "^0.2.0",
     "next": "16.0.8",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "three": "^0.182.0",
     "typescript": "5.8.3"
   },
   "devDependencies": {
+    "@types/three": "^0.182.0",
     "eslint": "8.57.0",
     "eslint-config-next": "15.4.1",
     "prettier": "^3.7.4"

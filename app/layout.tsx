@@ -10,6 +10,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.process = { env: {} };`,
+          }}
+        />
         <style>{`
           *, *::before, *::after {
             box-sizing: border-box;
