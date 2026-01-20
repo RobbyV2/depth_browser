@@ -1,0 +1,19 @@
+# Core deps for ONNX Runtime path
+pillow>=9.0.0
+numpy>=1.24.0
+huggingface_hub>=0.20.0
+
+# ONNX Runtime - base package (replaced by onnxruntime-directml on Windows)
+onnxruntime>=1.17.0
+
+# Fast JPEG decoding (includes libjpeg-turbo on Windows)
+PyTurboJPEG>=1.7.0
+
+# DirectML support (Windows AMD/Intel GPUs)
+# Replaces base onnxruntime, install via: pip install onnxruntime-directml
+# Or use: just src::setup-onnx-directml
+
+# PyTorch deps (optional, for legacy path)
+# torch>=2.0.0
+# torchvision>=0.15.0
+# transformers>=4.35.0

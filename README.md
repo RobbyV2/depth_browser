@@ -1,196 +1,164 @@
-# rust-next
+# DepthXR Browser
 
-Next.js frontend with Rust backend API server using file-system based routing.
-
-## Branches
-
-- **main**: The active development branch (Rust Backend + Next.js Frontend).
-- **static**: Rust WASM + Next.js (no backend server). Ideal for static hosting.
-- **single-server**: A variation with a single server setup.
-
-## Architecture
-
-This template uses a two-server architecture where Rust is the main entry point:
-
-- **Rust Server** (Port 3000) - Main entry point handling API routes
-- **Next.js Server** (Port 3001) - Frontend with hot reload in dev, optimized build in production
-- Rust proxies non-API requests to Next.js
-- Browser connects to `http://localhost:3000` for everything
+Real-time depth estimation and 3D visualization for screen capture. Captures any window/screen and renders it as a depth-displaced 3D mesh.
 
 ## Features
 
-- **Rust Backend**: Fast, type-safe API server using Axum
-- **Rust WASM**: Client-side Rust code via WebAssembly
-- **Next.js Frontend**: Modern React framework with TypeScript
-- **Single Port Access**: All requests go through Rust server on port 3000
-- **CORS Handling**: Automatic CORS configuration
-- **Hot Reload**: Development mode with Next.js hot module replacement
-- **Production Ready**: Standalone Next.js build for optimal performance
+- Screen/window capture via getDisplayMedia
+- Client-side depth estimation using WebGPU (@huggingface/transformers)
+- Server-side depth estimation using PyTorch (CUDA, ROCm, DirectML)
+- Real-time 3D visualization with Three.js/React Three Fiber
+- Multiple depth filter modes (nearest, linear, quantized, contrast, bilateral)
+
+## Prerequisites
+
+- Rust (stable)
+- Node.js 18+ and Bun
+- Python 3.11 (for server-side depth with DirectML) or 3.12 (for ROCm)
+- just command runner
+- wasm-pack
 
 ## Quick Start
 
-### Prerequisites
-
-- Rust (latest stable)
-- Node.js 18+
-- [Bun](https://bun.sh/) (v1.0+)
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
-- [just](https://github.com/casey/just) command runner
-
-### Development Mode
-
-```bash
-just src dev
+```
+just src::dev
 ```
 
-This starts:
+Opens at http://localhost:3030
 
-- Builds WASM (dev mode)
-- Rust server on port 3000
-- Next.js dev server on port 3001
-- Visit `http://localhost:3000`
+## Depth Modes
 
-### Production Mode
+### Client-Side (WebGPU)
 
-```bash
-just src build-all
-# Run production servers
-./target/release/server    # Terminal 1
-bun start                   # Terminal 2
+Runs in browser using your GPU via WebGPU. No server setup required. Works on any modern browser with WebGPU support.
+
+### Server-Side (PyTorch)
+
+Runs on the Rust server using PyTorch. Requires Python setup. Faster with dedicated GPU.
+
+## GPU Setup
+
+### Check Current Status
+
+```
+just src::check-gpu
+```
+
+### NVIDIA (CUDA)
+
+```
+just src::setup-python-cuda
+```
+
+### AMD Options
+
+RX 7000/9000 series (ROCm native):
+
+```
+just src::setup-amd-rocm
+```
+
+Any AMD GPU (DirectML, requires Python 3.11):
+
+```
+just src::setup-amd-directml
+```
+
+ZLUDA (experimental):
+
+```
+just src::setup-amd-zluda
+```
+
+### Running with DirectML
+
+```
+just src::dev-dml
+```
+
+## Environment Variables
+
+Create `.env.local`:
+
+```
+SERVER_PORT=3030
+SERVER_HOST=127.0.0.1
+SERVER_PROXY_URL=http://127.0.0.1:3031
+
+NEXT_PUBLIC_DEPTH_INFERENCE_BASE=384
+NEXT_PUBLIC_DEPTH_TARGET_FPS=15
+NEXT_PUBLIC_DEPTH_FILTER_MODE=nearest
 ```
 
 ## Project Structure
 
 ```
-.
-├── src/
-│   ├── api/           # API route handlers
-│   ├── server/        # Server configuration and routing
-│   └── bin/server.rs  # Main Rust entry point
-├── wasm/              # Rust WASM source
-│   └── src/lib.rs     # WASM entry point
-├── app/
-│   ├── lib/           # Frontend utilities and API client
-│   ├── page.tsx       # Home page
-│   └── layout.tsx     # Root layout
-├── Cargo.toml         # Workspace config
-├── package.json       # Node.js dependencies
-└── justfile          # Build and run commands
+app/
+  page.tsx              Main UI
+  components/
+    DepthScene.tsx      3D visualization (R3F)
+  lib/
+    depth-pipeline.ts   Client-side depth (WebGPU)
+    depth-server.ts     Server-side WebSocket client
+
+src/
+  api/
+    depth.rs            PyO3 depth model wrapper
+    ws_depth.rs         WebSocket handler
+  server/
+    route_builder.rs    Route registration
+  bin/
+    server.rs           Main entry point
+
+python/
+  depth_estimator.py    PyTorch depth inference
+  requirements.txt      Python dependencies
+  check_gpu.py          GPU detection script
+
+jfiles/src/
+  run.just              Dev/prod commands
+  build.just            Build commands
+  python.just           Python/GPU setup commands
 ```
 
-## WASM Support
+## Commands
 
-The template includes support for Rust WASM modules.
-
-1.  Code is in `wasm/src/lib.rs`
-2.  Built to `public/wasm/`
-3.  Loaded in frontend using `import` (see `app/wasm/page.tsx` for example)
-
-To build WASM manually:
-
-```bash
-just src build-wasm
+```
+just                         List all commands
+just src::dev                Run dev servers (Rust + Next.js)
+just src::dev-dml            Run with DirectML venv
+just src::build-all          Build for production
+just src::check-gpu          Check GPU availability
+just src::setup-python       Install Python deps (CPU)
+just src::setup-python-cuda  Install with CUDA
+just src::setup-amd-directml Install with DirectML (Python 3.11)
+just src::setup-amd-rocm     Install with ROCm
 ```
 
-## Environment Variables
+## Architecture
 
-Create a `.env.local` file:
-
-```env
-SERVER_PORT=3000
-SERVER_HOST=127.0.0.1
-PORT=3001
-HOSTNAME=localhost
-RUST_LOG=info
+```
+Browser (3030) --> Rust/Axum --> Next.js (3031)
+                      |
+                      v
+              WebSocket /ws/depth
+                      |
+                      v
+              PyO3 --> Python/PyTorch
 ```
 
-For remote access (e.g., Codespaces):
+Rust server is the main entry point. It handles API routes and WebSocket connections, proxying frontend requests to Next.js.
 
-- Set `SERVER_HOST=0.0.0.0`
-- Set `HOSTNAME=0.0.0.0` (dev mode only)
+## Filter Modes
 
-## Adding New API Routes
+- nearest: Sharp edges, no interpolation
+- linear: Smooth interpolation
+- linear-mipmap: Smooth with mipmaps
+- quantized: Discrete depth levels
+- contrast: Enhanced mid-range contrast
+- bilateral: Edge-preserving smoothing
 
-1. Add route handler in `src/api/mod.rs`:
-
-```rust
-async fn my_route() -> Json<MyResponse> {
-    Json(MyResponse { /* ... */ })
-}
-
-pub fn routes() -> Router {
-    Router::new()
-        .route("/hello", get(hello))
-        .route("/my-route", get(my_route))  // Add here
-}
-```
-
-2. Call from frontend in `app/lib/api.ts`:
-
-```typescript
-export async function myRoute(): Promise<MyResponse> {
-  const response = await fetch('/api/my-route')
-  return handleResponse<MyResponse>(response)
-}
-```
-
-## Development Commands
-
-### Using Just
-
-```bash
-just                        # List all available commands
-just src                    # List all src commands
-
-# Development (run.just)
-just src dev                # Run BOTH servers together (Bash/WSL/Unix only!)
-just src api                # Run Rust API only
-just src frontend           # Run Next.js only
-just src api-release        # Run Rust API (release mode)
-just src frontend-prod      # Run Next.js (production mode)
-
-# Build (build.just)
-just src build              # Build Rust for production
-just src build-api          # Build Rust API for production
-just src build-frontend     # Build Next.js for production
-just src build-wasm         # Build WASM module
-just src build-all          # Build both for production
-just src check              # Check Rust code without building
-
-# Format & Lint (build.just)
-just src fmt                # Format and lint ALL code (Rust + TypeScript)
-just src fmt-check          # Check formatting without changes
-just src fmt-rust           # Format Rust only
-just src fmt-ts             # Format TypeScript only
-
-# Test (test.just)
-just src test               # Run Rust tests
-
-# Maintenance (justfile)
-just src install            # Install dependencies
-just src clean              # Clean build artifacts
-```
-
-## Tech Stack
-
-### Backend (Rust)
-
-- **axum**: Modern web framework
-- **tokio**: Async runtime
-- **serde/serde_json**: Serialization
-- **tower-http**: HTTP middleware (CORS, tracing)
-- **tracing**: Structured logging
-
-### WASM (Rust)
-
-- **wasm-bindgen**: Rust/JS interoperability
-- **web-sys**: Web APIs
-
-### Frontend (Next.js)
-
-- **React 19**: UI framework
-- **Next.js 16**: React framework with App Router
-- **TypeScript**: Type safety
+Select filter mode in the UI dropdown during capture.
 
 ## License
 

@@ -9,7 +9,14 @@ import {
   FILTER_MODES,
   type DepthResult,
   type DepthFilterMode,
+  type DepthMode,
 } from './lib/depth-pipeline'
+import {
+  connectServerDepth,
+  disconnectServerDepth,
+  estimateServerDepth,
+  isServerDepthConnected,
+} from './lib/depth-server'
 
 const DepthScene = lazy(() => import('./components/DepthScene'))
 
@@ -37,10 +44,11 @@ export default function Home() {
   const [isCapturing, setIsCapturing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string>('')
-  const [lastDepthResult, setLastDepthResult] = useState<DepthResult | null>(null)
   const [show3D, setShow3D] = useState(false)
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null)
+  const [inferenceMs, setInferenceMs] = useState<number | null>(null)
   const [filterMode, setFilterMode] = useState<DepthFilterMode>(getDefaultFilterMode)
+  const [depthMode, setDepthMode] = useState<DepthMode>('client')
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -58,6 +66,9 @@ export default function Home() {
   const targetDepthIntervalRef = useRef(
     1000 / parseInt(process.env.NEXT_PUBLIC_DEPTH_TARGET_FPS || '15', 10)
   )
+  const depthModeRef = useRef<DepthMode>(depthMode)
+  const depthResultRef = useRef<DepthResult | null>(null)
+  const lastInferenceUpdateRef = useRef(0)
 
   const renderDepthToCanvas = useCallback((result: DepthResult) => {
     const canvas = depthPreviewRef.current
@@ -99,20 +110,48 @@ export default function Home() {
     ctx.putImageData(depthImageDataRef.current, 0, 0)
   }, [])
 
-  const runDepthOnFrame = useCallback(async (video: HTMLVideoElement) => {
-    if (!depthReadyRef.current || depthRunningRef.current) return
+  const runDepthOnFrame = useCallback(
+    async (video: HTMLVideoElement, mode: DepthMode) => {
+      if (!depthReadyRef.current || depthRunningRef.current) return
 
-    depthRunningRef.current = true
-    try {
-      const result = await estimateDepth(video, filterMode)
-      setLastDepthResult(result)
-      renderDepthToCanvas(result)
-    } catch (err) {
-      console.error('[DEPTH] Inference error:', err)
-    } finally {
-      depthRunningRef.current = false
-    }
-  }, [renderDepthToCanvas, filterMode])
+      depthRunningRef.current = true
+      try {
+        let result: DepthResult
+        if (mode === 'server') {
+          const serverResult = await estimateServerDepth(video)
+          result = {
+            depthFloat: serverResult.depthFloat,
+            depthData: serverResult.depthData,
+            width: serverResult.width,
+            height: serverResult.height,
+            inferenceMs: serverResult.rttMs,
+          }
+          console.log(`[DEPTH] Server RTT: ${serverResult.rttMs.toFixed(0)}ms`)
+        } else {
+          result = await estimateDepth(video, filterMode)
+          console.log(`[DEPTH] Client inference: ${result.inferenceMs.toFixed(0)}ms`)
+        }
+        // Update ref (no React re-render) for 3D scene
+        depthResultRef.current = result
+        // Render to 2D canvas
+        renderDepthToCanvas(result)
+        // Throttle inference time display updates (reduce React re-renders)
+        const now = performance.now()
+        if (now - lastInferenceUpdateRef.current > 200) {
+          lastInferenceUpdateRef.current = now
+          // Defer state update to not block render loop
+          setTimeout(() => setInferenceMs(result.inferenceMs), 0)
+        }
+      } catch (err) {
+        console.error('[DEPTH] Inference error:', err)
+      } finally {
+        // Yield to let Three.js render before next inference
+        await new Promise(r => setTimeout(r, 0))
+        depthRunningRef.current = false
+      }
+    },
+    [renderDepthToCanvas, filterMode]
+  )
 
   const captureFrame = useCallback(() => {
     const video = videoRef.current
@@ -129,7 +168,7 @@ export default function Home() {
       const elapsed = now - lastDepthTimeRef.current
       if (elapsed >= targetDepthIntervalRef.current) {
         lastDepthTimeRef.current = now
-        runDepthOnFrame(video)
+        runDepthOnFrame(video, depthModeRef.current)
       }
     }
 
@@ -180,12 +219,16 @@ export default function Home() {
       setIsCapturing(true)
       video.srcObject = stream
 
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         const timeout = setTimeout(resolve, 3000)
-        video.addEventListener('canplay', () => {
-          clearTimeout(timeout)
-          video.play().finally(resolve)
-        }, { once: true })
+        video.addEventListener(
+          'canplay',
+          () => {
+            clearTimeout(timeout)
+            video.play().finally(resolve)
+          },
+          { once: true }
+        )
       })
 
       videoRef.current = video
@@ -201,20 +244,35 @@ export default function Home() {
 
       rafRef.current = requestAnimationFrame(captureFrame)
 
-      // Load depth model
-      if (!isDepthPipelineReady()) {
-        setStatus('Loading depth model...')
+      // Store current mode in ref for captureFrame access
+      depthModeRef.current = depthMode
+
+      // Initialize depth based on mode
+      if (depthMode === 'server') {
+        setStatus('Connecting to server...')
         try {
-          await initDepthPipeline()
+          await connectServerDepth()
           depthReadyRef.current = true
-          setStatus('Depth active')
+          setStatus('Server depth active')
         } catch (err) {
-          console.error('[DEPTH] Load failed:', err)
-          setStatus('Depth unavailable')
+          console.error('[SERVER-DEPTH] Connection failed:', err)
+          setStatus('Server unavailable - try client mode')
         }
       } else {
-        depthReadyRef.current = true
-        setStatus('Depth active')
+        if (!isDepthPipelineReady()) {
+          setStatus('Loading depth model...')
+          try {
+            await initDepthPipeline()
+            depthReadyRef.current = true
+            setStatus('Depth active')
+          } catch (err) {
+            console.error('[DEPTH] Load failed:', err)
+            setStatus('Depth unavailable')
+          }
+        } else {
+          depthReadyRef.current = true
+          setStatus('Depth active')
+        }
       }
     } catch (err) {
       console.error('[CAPTURE] Failed:', err)
@@ -235,6 +293,11 @@ export default function Home() {
     if (videoRef.current?.parentNode) {
       videoRef.current.parentNode.removeChild(videoRef.current)
     }
+    // Disconnect server depth if connected
+    if (isServerDepthConnected()) {
+      disconnectServerDepth()
+    }
+    depthReadyRef.current = false
     videoRef.current = null
     setVideoElement(null)
     setIsCapturing(false)
@@ -249,21 +312,57 @@ export default function Home() {
   }
 
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      backgroundColor: '#1a1a2e',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '1.5rem',
-      padding: '2rem',
-      overflow: 'auto',
-    }}>
-      <h1 style={{ color: '#e94560', margin: 0, fontFamily: 'system-ui' }}>
-        DepthXR Capture
-      </h1>
+    <div
+      style={{
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '1.5rem',
+        padding: '2rem',
+        overflow: 'auto',
+      }}
+    >
+      <h1 style={{ color: '#e94560', margin: 0, fontFamily: 'system-ui' }}>DepthXR Capture</h1>
+
+      {!isCapturing && (
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ color: '#8892b0', fontSize: '0.875rem' }}>Depth Mode:</span>
+          <button
+            onClick={() => setDepthMode('client')}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              backgroundColor: depthMode === 'client' ? '#e94560' : '#16213e',
+              color: depthMode === 'client' ? 'white' : '#8892b0',
+              border: depthMode === 'client' ? 'none' : '1px solid #0f3460',
+              borderRadius: '6px 0 0 6px',
+              cursor: 'pointer',
+              fontWeight: depthMode === 'client' ? 'bold' : 'normal',
+            }}
+          >
+            Client (WebGPU)
+          </button>
+          <button
+            onClick={() => setDepthMode('server')}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              backgroundColor: depthMode === 'server' ? '#e94560' : '#16213e',
+              color: depthMode === 'server' ? 'white' : '#8892b0',
+              border: depthMode === 'server' ? 'none' : '1px solid #0f3460',
+              borderRadius: '0 6px 6px 0',
+              cursor: 'pointer',
+              fontWeight: depthMode === 'server' ? 'bold' : 'normal',
+            }}
+          >
+            Server (PyTorch)
+          </button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '1rem' }}>
         {!isCapturing ? (
@@ -318,16 +417,14 @@ export default function Home() {
         )}
       </div>
 
-      {status && (
-        <div style={{ color: '#8892b0', fontSize: '0.875rem' }}>{status}</div>
-      )}
+      {status && <div style={{ color: '#8892b0', fontSize: '0.875rem' }}>{status}</div>}
 
       {isCapturing && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <label style={{ color: '#8892b0', fontSize: '0.75rem' }}>Filter:</label>
           <select
             value={filterMode}
-            onChange={(e) => setFilterMode(e.target.value as DepthFilterMode)}
+            onChange={e => setFilterMode(e.target.value as DepthFilterMode)}
             style={{
               padding: '0.25rem 0.5rem',
               fontSize: '0.75rem',
@@ -338,27 +435,47 @@ export default function Home() {
               cursor: 'pointer',
             }}
           >
-            {FILTER_MODES.map((mode) => (
-              <option key={mode} value={mode}>{mode}</option>
+            {FILTER_MODES.map(mode => (
+              <option key={mode} value={mode}>
+                {mode}
+              </option>
             ))}
           </select>
         </div>
       )}
 
-      {error && (
-        <div style={{ color: '#e94560', fontFamily: 'monospace' }}>Error: {error}</div>
-      )}
+      {error && <div style={{ color: '#e94560', fontFamily: 'monospace' }}>Error: {error}</div>}
 
       {show3D && isCapturing && (
-        <div style={{ width: '100%', maxWidth: '1200px', aspectRatio: '16 / 9', borderRadius: '8px', overflow: 'hidden' }}>
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '1200px',
+            aspectRatio: '16 / 9',
+            borderRadius: '8px',
+            overflow: 'hidden',
+          }}
+        >
           <Suspense fallback={<div style={{ color: '#8892b0' }}>Loading 3D scene...</div>}>
-            <DepthScene videoElement={videoElement} depthResult={lastDepthResult} filterMode={filterMode} />
+            <DepthScene
+              videoElement={videoElement}
+              depthResultRef={depthResultRef}
+              filterMode={filterMode}
+            />
           </Suspense>
         </div>
       )}
 
       {/* Always render preview div to keep video element alive */}
-      <div style={{ display: show3D ? 'none' : 'flex', gap: '1rem', width: '100%', maxWidth: '1200px', justifyContent: 'center' }}>
+      <div
+        style={{
+          display: show3D ? 'none' : 'flex',
+          gap: '1rem',
+          width: '100%',
+          maxWidth: '1200px',
+          justifyContent: 'center',
+        }}
+      >
         <div
           ref={previewRef}
           style={{
@@ -374,7 +491,7 @@ export default function Home() {
         {isCapturing && !show3D && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <div style={{ color: '#8892b0', fontSize: '0.75rem' }}>
-              Depth Map {lastDepthResult && `(${lastDepthResult.inferenceMs.toFixed(0)}ms)`}
+              Depth Map {inferenceMs !== null && `(${inferenceMs.toFixed(0)}ms)`}
             </div>
             <canvas
               ref={depthPreviewRef}
@@ -391,13 +508,15 @@ export default function Home() {
         )}
       </div>
 
-      <div style={{
-        padding: '1rem',
-        backgroundColor: '#16213e',
-        borderRadius: '8px',
-        width: '100%',
-        maxWidth: '400px',
-      }}>
+      <div
+        style={{
+          padding: '1rem',
+          backgroundColor: '#16213e',
+          borderRadius: '8px',
+          width: '100%',
+          maxWidth: '400px',
+        }}
+      >
         <div style={{ color: '#5c6370', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
           Quick open (optional)
         </div>

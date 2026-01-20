@@ -26,11 +26,27 @@ build-frontend:
   cd {{ROOT}} && cp -r public .next/standalone/public
 
 # Build everything for production
-build-all: build-wasm build-api build-frontend
+build-all: build-wasm build-api build-frontend bundle-python
   @echo "Production build complete!"
   @echo "API binary: {{ROOT}}/target/release/server"
-  @echo "WASM: {{ROOT}}/public/wasm/"
-  @echo "Frontend: {{ROOT}}/.next"
+  @echo "Python:     {{ROOT}}/target/release/python/"
+  @echo "WASM:       {{ROOT}}/public/wasm/"
+  @echo "Frontend:   {{ROOT}}/.next"
+
+# Bundle Python directory with release binary
+bundle-python:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{ROOT}}"
+
+  DEST="target/release/python"
+  mkdir -p "$DEST"
+
+  echo "Bundling Python files to $DEST..."
+  cp python/*.py "$DEST/"
+  cp python/requirements.txt "$DEST/"
+
+  echo "Python bundled successfully"
 
 # Check Rust code without building
 check:

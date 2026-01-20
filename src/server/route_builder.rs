@@ -3,9 +3,36 @@ use axum::{
     extract::Request,
     http::StatusCode,
     response::{IntoResponse, Response},
+    routing::get,
 };
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
+use std::path::PathBuf;
+use tower_http::services::ServeDir;
+
+use crate::api::depth::init_depth_model;
+use crate::api::ws_depth::ws_depth_handler;
+
+/// Find the models directory
+fn find_models_dir() -> PathBuf {
+    // Try relative to executable
+    if let Ok(exe) = std::env::current_exe() {
+        let exe_dir = exe.parent().unwrap_or(&exe);
+        let models_dir = exe_dir.join("models").join("onnx");
+        if models_dir.exists() {
+            return models_dir;
+        }
+        // Try parent (cargo run)
+        if let Some(parent) = exe_dir.parent() {
+            let models_dir = parent.join("models").join("onnx");
+            if models_dir.exists() {
+                return models_dir;
+            }
+        }
+    }
+    // Fall back to current directory
+    PathBuf::from("./models/onnx")
+}
 
 /// Proxy requests to Next.js dev server
 async fn proxy_to_nextjs(mut req: Request) -> Response {
@@ -64,5 +91,19 @@ async fn proxy_to_nextjs(mut req: Request) -> Response {
 
 /// Register all routes
 pub async fn register_routes() -> Router {
-    Router::new().fallback(proxy_to_nextjs)
+    // Initialize depth model at startup
+    let depth_model = init_depth_model().await;
+
+    // Setup ONNX model serving
+    let models_dir = find_models_dir();
+    tracing::info!("[MODELS] Serving ONNX models from {:?}", models_dir);
+
+    Router::new()
+        // WebSocket depth inference route
+        .route("/ws/depth", get(ws_depth_handler))
+        .with_state(depth_model)
+        // Serve ONNX models for client-side inference
+        .nest_service("/models", ServeDir::new(&models_dir))
+        // Fallback to Next.js proxy
+        .fallback(proxy_to_nextjs)
 }

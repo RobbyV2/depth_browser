@@ -2,6 +2,7 @@ import "../common.just"
 import "./build.just"
 import "./test.just"
 import "./run.just"
+import "./python.just"
 
 # Default recipe
 default:

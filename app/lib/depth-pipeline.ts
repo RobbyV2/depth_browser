@@ -1,7 +1,15 @@
-const MODEL_ID = 'onnx-community/depth-anything-v2-small'
+const HF_MODEL_ID = 'onnx-community/depth-anything-v2-small'
+const LOCAL_MODEL_PATH = '/models/depth-anything-v2-small'
 const INFERENCE_BASE = parseInt(process.env.NEXT_PUBLIC_DEPTH_INFERENCE_BASE || '384', 10)
 
-export type DepthFilterMode = 'nearest' | 'linear' | 'linear-mipmap' | 'quantized' | 'contrast' | 'bilateral'
+export type DepthFilterMode =
+  | 'nearest'
+  | 'linear'
+  | 'linear-mipmap'
+  | 'quantized'
+  | 'contrast'
+  | 'bilateral'
+export type DepthMode = 'client' | 'server'
 
 interface DepthTensor {
   data: Float32Array | Float64Array | number[]
@@ -14,15 +22,27 @@ interface DepthOutput {
   predicted_depth?: DepthTensor
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TransformersModule = any
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RawImageType = any
-type DepthPipeline = (input: RawImageType) => Promise<DepthOutput | DepthOutput[]>
+interface RawImageInstance {
+  readonly data: Uint8ClampedArray | Uint8Array
+  readonly width: number
+  readonly height: number
+  readonly channels: number
+}
+
+interface RawImageConstructor {
+  new (
+    data: Uint8ClampedArray | Uint8Array,
+    width: number,
+    height: number,
+    channels: 1 | 2 | 3 | 4
+  ): RawImageInstance
+}
+
+type DepthPipeline = (input: RawImageInstance) => Promise<DepthOutput | DepthOutput[]>
 
 interface PipelineState {
   pipeline: DepthPipeline | null
-  RawImage: RawImageType | null
+  RawImage: RawImageConstructor | null
   loading: boolean
   error: string | null
   offscreen: OffscreenCanvas | null
@@ -56,6 +76,15 @@ export interface DepthResult {
   inferenceMs: number
 }
 
+async function checkLocalModels(): Promise<boolean> {
+  try {
+    const res = await fetch(`${LOCAL_MODEL_PATH}/config.json`, { method: 'HEAD' })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 export async function initDepthPipeline(): Promise<void> {
   if (S.pipeline || S.loading) return
 
@@ -65,25 +94,38 @@ export async function initDepthPipeline(): Promise<void> {
   try {
     const { pipeline, env, RawImage } = await import('@huggingface/transformers')
     env.useBrowserCache = true
-    env.allowLocalModels = false
     S.RawImage = RawImage
 
     console.log('[DEPTH] Loading model...')
     const t0 = performance.now()
 
+    // Check if local models are available
+    const hasLocal = await checkLocalModels()
+    const modelSource = hasLocal ? LOCAL_MODEL_PATH : HF_MODEL_ID
+    env.allowLocalModels = hasLocal
+
+    if (hasLocal) {
+      console.log('[DEPTH] Using local cached model')
+    } else {
+      console.log('[DEPTH] Downloading from HuggingFace...')
+    }
+
     try {
-      S.pipeline = await pipeline('depth-estimation', MODEL_ID, {
+      S.pipeline = (await pipeline('depth-estimation', modelSource, {
         device: 'webgpu',
         dtype: 'fp16',
-      }) as unknown as DepthPipeline
+      })) as unknown as DepthPipeline
       console.log(`[DEPTH] WebGPU ready in ${((performance.now() - t0) / 1000).toFixed(1)}s`)
     } catch {
-      S.pipeline = await pipeline('depth-estimation', MODEL_ID) as unknown as DepthPipeline
+      S.pipeline = (await pipeline('depth-estimation', modelSource)) as unknown as DepthPipeline
       console.log(`[DEPTH] WASM fallback in ${((performance.now() - t0) / 1000).toFixed(1)}s`)
     }
 
     S.offscreen = new OffscreenCanvas(INFERENCE_BASE, INFERENCE_BASE)
-    S.ctx = S.offscreen.getContext('2d', { willReadFrequently: true, alpha: false }) as OffscreenCanvasRenderingContext2D
+    S.ctx = S.offscreen.getContext('2d', {
+      willReadFrequently: true,
+      alpha: false,
+    }) as OffscreenCanvasRenderingContext2D
   } catch (err) {
     S.error = err instanceof Error ? err.message : String(err)
     console.error('[DEPTH] Init failed:', S.error)
@@ -98,7 +140,14 @@ export const isDepthPipelineLoading = () => S.loading
 export const getDepthPipelineError = () => S.error
 export const getDefaultFilterMode = (): DepthFilterMode =>
   (process.env.NEXT_PUBLIC_DEPTH_FILTER_MODE as DepthFilterMode) || 'nearest'
-export const FILTER_MODES: DepthFilterMode[] = ['nearest', 'linear', 'linear-mipmap', 'quantized', 'contrast', 'bilateral']
+export const FILTER_MODES: DepthFilterMode[] = [
+  'nearest',
+  'linear',
+  'linear-mipmap',
+  'quantized',
+  'contrast',
+  'bilateral',
+]
 
 // Post-processing functions for different filter modes
 function applyQuantization(data: Float32Array, levels: number = 8): void {
@@ -139,7 +188,9 @@ function applyBilateral(data: Float32Array, width: number, height: number): void
 
           // Spatial weight (Gaussian)
           const spatialDist = Math.sqrt(dx * dx + dy * dy)
-          const spatialWeight = Math.exp(-(spatialDist * spatialDist) / (2 * sigma_space * sigma_space))
+          const spatialWeight = Math.exp(
+            -(spatialDist * spatialDist) / (2 * sigma_space * sigma_space)
+          )
 
           // Depth weight (preserve edges)
           const depthDiff = Math.abs(neighborDepth - centerDepth)
@@ -205,7 +256,8 @@ export async function estimateDepth(
   }
 
   // Find frame min/max
-  let frameMin = d[0], frameMax = d[0]
+  let frameMin = d[0],
+    frameMax = d[0]
   for (let i = 1; i < n; i++) {
     const v = d[i]
     if (v < frameMin) frameMin = v
